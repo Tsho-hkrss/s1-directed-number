@@ -1,0 +1,874 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>有向數拔河（中一版）Math Tug of War</title>
+<style>
+  :root{
+    --blue:#2563eb; --blue-mid:#3b82f6; --red:#e11d48; --red-mid:#f43f5e;
+    --bg:#f6f7fb; --panel:#ffffff; --text:#111827; --muted:#6b7280;
+    --ok:#2563eb; --danger:#ef4444; --yellow:#f5c400; --line:#e5e7eb;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,Segoe UI,Roboto,Noto Sans TC,Arial}
+  header{position:sticky;top:0;z-index:10;background:#fff;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;padding:10px 14px}
+  h1{margin:0;font-size:18px}
+  .controls{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  .timer{font-weight:800}
+  button,select,input{font:inherit;border-radius:10px;border:1px solid var(--line);background:#fff}
+  button{padding:10px 14px;cursor:pointer}
+  .primary{background:var(--ok);border-color:var(--ok);color:#fff}
+  .danger{background:var(--danger);border-color:var(--danger);color:#fff}
+
+  .grid{
+    display:grid;gap:12px;padding:12px;
+    grid-template-columns:1fr minmax(320px,1.3fr) 1fr;
+    align-items:stretch;
+  }
+  @media (max-width:900px){
+    .grid{grid-template-columns:1fr}
+    .arena{order:2}
+    .p1{order:1}
+    .p2{order:3}
+  }
+
+  .panel{background:var(--panel);border-radius:16px;box-shadow:0 8px 20px rgba(16,24,40,.06);padding:12px;display:flex;flex-direction:column;gap:12px}
+  .title{border-radius:12px;padding:10px 12px;color:#fff;font-weight:800;display:flex;justify-content:space-between}
+  .p1 .title{background:linear-gradient(135deg,var(--blue),var(--blue-mid))}
+  .p2 .title{background:linear-gradient(135deg,var(--red),var(--red-mid))}
+  .question{font-weight:900;font-size:40px;line-height:1.1;min-height:56px}
+
+  .display{
+    flex:1;padding:12px 14px;border-radius:10px;border:2px solid var(--line);
+    font-size:28px;font-weight:800;background:#fff;min-height:56px;
+    display:flex;align-items:center;justify-content:flex-end;user-select:none
+  }
+  .display span{letter-spacing:.5px}
+  .placeholder{color:#9ca3af;font-weight:600}
+
+  .statusRow{display:flex;justify-content:space-between;align-items:center;color:var(--muted);font-size:14px}
+  .rank{display:flex;gap:8px;align-items:center}
+  .rank strong{min-width:28px;display:inline-block;text-align:center}
+
+  .pad{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+  .key{
+    padding:14px 0;border-radius:12px;border:1px solid var(--line);background:#fff;
+    font-weight:700;font-size:18px;cursor:pointer;user-select:none
+  }
+  .key.ok{background:var(--ok);color:#fff;border-color:var(--ok);grid-column:span 2}
+  .key.c{background:#fee2e2;color:#991b1b;border-color:#fecaca}
+  .key:active{transform:scale(0.98)}
+
+  .ropeWrap{background:linear-gradient(#ffffff,#f8fafc);border-radius:16px;box-shadow:inset 0 0 0 1px var(--line);padding:12px;display:flex;flex-direction:column;gap:8px;align-items:center}
+  .track{width:100%;max-width:980px;position:relative;margin-top:6px}
+  .bar{height:10px;background:#e5e7eb;border-radius:999px;position:relative}
+  .tick{position:absolute;top:50%;transform:translate(-50%,-50%);width:2px;height:22px;background:#cbd5e1;opacity:.8}
+  .victory{position:absolute;top:50%;right:6%;transform:translateY(-50%);width:2px;height:70px;background:var(--yellow)}
+  .flag{position:absolute;top:50%;transform:translate(-50%,-50%);width:30px;height:30px;border-radius:50%;
+        background:linear-gradient(135deg,#38bdf8,#3b82f6);border:3px solid #fff;box-shadow:0 6px 12px rgba(0,0,0,.15);
+        display:grid;place-items:center;color:#fff;font-size:14px;font-weight:900;transition:transform .35s cubic-bezier(.2,.8,.2,1)}
+
+  .svgStage{width:100%;max-width:980px}
+  .ropeLine{stroke:#7b4b2a;stroke-width:10;stroke-linecap:round}
+  .ropeWrap .ground{stroke:#cbd5e1;stroke-width:4}
+
+  #ropeFlag{filter: drop-shadow(0 4px 10px rgba(0,0,0,.25)); stroke:#ffffff; stroke-width:4;}
+
+  /* 人物外觀設定 */
+  .team .head, .team .neck { fill: #fdebc8; }
+  .team .hair { fill: #1f2937; }
+  .team .shirt.blue { fill: var(--blue-mid); }
+  .team .shirt.red { fill: var(--red-mid); }
+  .team .shorts.blue { fill: #1d4ed8; }
+  .team .shorts.red { fill: #b91c1c; }
+  .team .shoe { fill: #111827; }
+  .team .arm, .team .leg { stroke-linecap: round; stroke-linejoin: round; stroke: #444; stroke-width: 7; fill: none; }
+
+  /* 動畫：靜止時手臂微動 */
+  .idle .forearmL { animation: forearm 1.5s ease-in-out infinite alternate; }
+  .idle .forearmR { animation: forearm 1.5s ease-in-out infinite alternate-reverse; }
+  @keyframes forearm { from { transform: rotate(-4deg); } to { transform: rotate(6deg); } }
+
+  /* 動畫：靜止時的呼吸感 */
+  .idle .bodyWrap { animation: breathe 1.5s ease-in-out infinite alternate; }
+  @keyframes breathe {
+    0% { transform: translateX(0) rotate(-15deg) scaleY(1); }
+    100% { transform: translateX(0) rotate(-16deg) scaleY(0.97); }
+  }
+
+  /* 動畫：勝利方（強力後拉） */
+  .tugLeft .team.blue .bodyWrap, .tugRight .team.red .bodyWrap {
+    animation: powerPull 0.5s cubic-bezier(0.2, 0.9, 0.3, 1) 1;
+  }
+  @keyframes powerPull {
+    0% { transform: translateX(0) rotate(-15deg); }
+    30% { transform: translateX(-24px) rotate(-30deg); } /* 用力後仰深蹲 */
+    70% { transform: translateX(-10px) rotate(-22deg); }
+    100% { transform: translateX(0) rotate(-15deg); }
+  }
+
+  /* 動畫：失敗方（踉蹌前傾） */
+  /* 注意：因為紅隊有 scale(-1,1) 鏡像，所以正向的 translateX(+25px) 對兩隊都是朝畫面中央跌倒 */
+  .tugLeft .team.red .bodyWrap, .tugRight .team.blue .bodyWrap {
+    animation: stumble 0.5s cubic-bezier(0.2, 0.9, 0.3, 1) 1;
+  }
+  @keyframes stumble {
+    0% { transform: translateX(0) rotate(-15deg); }
+    30% { transform: translateX(25px) rotate(8deg); } /* 被拉扯踉蹌 */
+    70% { transform: translateX(10px) rotate(-2deg); }
+    100% { transform: translateX(0) rotate(-15deg); }
+  }
+
+  /* 動畫：爆汗特效 */
+  .tugLeft .team.blue .sweat, .tugRight .team.red .sweat,
+  .tugLeft .team.red .sweat, .tugRight .team.blue .sweat {
+    animation: sweatPop 0.5s ease-out 1 forwards;
+  }
+  @keyframes sweatPop {
+    0% { opacity: 0; transform: translateY(0) scale(0.5); }
+    30% { opacity: 1; transform: translateY(-10px) scale(1.5); }
+    100% { opacity: 0; transform: translateY(5px) scale(1); }
+  }
+
+  /* 動畫：繩索劇烈震動 */
+  .tugLeft #ropeGroup, .tugRight #ropeGroup {
+    animation: ropeVibrate 0.5s ease-in-out 1;
+  }
+  @keyframes ropeVibrate {
+    0%, 100% { transform: translateY(0); }
+    20% { transform: translateY(-4px); }
+    40% { transform: translateY(3px); }
+    60% { transform: translateY(-2px); }
+    80% { transform: translateY(1px); }
+  }
+
+  /* 動畫：繩索波浪紋理 */
+  .ropeWave { animation: wave 0.7s ease-out 1; }
+  @keyframes wave { 0% { stroke-dashoffset: 0; } 100% { stroke-dashoffset: 26; } }
+
+  .celebrate{animation:celebrate-bounce 900ms ease-in-out 1 forwards}
+  @keyframes celebrate-bounce{
+    0%{transform:translateY(0) scale(1)}
+    40%{transform:translateY(-8px) scale(1.03)}
+    100%{transform:translateY(0) scale(1.02)}
+  }
+  .defeat{opacity:.45; filter:grayscale(.2)}
+  #victoryOverlay{
+    position:fixed; inset:0; display:none; place-items:center; z-index:50;
+    background:rgba(17,24,39,.35); backdrop-filter:blur(2px);
+  }
+  .banner{
+    border-radius:16px; box-shadow:0 20px 60px rgba(0,0,0,.25);
+    padding:18px 22px; text-align:center; border:2px solid var(--line);
+    display:grid; gap:10px; min-width:280px; color:#fff;
+  }
+  .banner.blue{ background:linear-gradient(135deg,var(--blue),var(--blue-mid)); }
+  .banner.red{  background:linear-gradient(135deg,var(--red),var(--red-mid)); }
+  .banner h2{margin:0; font-size:26px}
+  .banner .who{font-weight:900; font-size:32px}
+  .again{background:#10b981; border:2px solid #0ea371; color:#fff; padding:10px 14px; border-radius:10px; cursor:pointer}
+
+  .toast{position:fixed;left:50%;top:10px;transform:translateX(-50%);background:#111827;color:#fff;padding:10px 14px;border-radius:10px;opacity:0;pointer-events:none;transition:.3s;z-index:20}
+  .toast.show{opacity:1;transform:translate(-50%,0)}
+</style>
+</head>
+<body>
+<header>
+  <h1>有向數拔河（中一版）</h1>
+  <div class="controls">
+    <span>時間：</span><span class="timer" id="timer">90</span>
+    <button id="btnSettings">設定</button>
+    <button class="primary" id="btnStart">開始</button>
+    <button class="danger" id="btnReset">重置</button>
+  </div>
+</header>
+
+<main class="grid">
+  <!-- 玩家 1 -->
+  <section class="panel p1" aria-labelledby="p1title">
+    <div class="title"><span id="p1title">玩家 1</span><span>藍隊</span></div>
+    <div class="question" id="q1">按「開始」產生題目</div>
+    <div class="inputRow">
+      <div id="d1" class="display" aria-live="polite"><span class="placeholder">點擊下方鍵盤輸入</span></div>
+    </div>
+    <div class="pad" id="pad1" aria-label="玩家1數位鍵盤"></div>
+    <div class="statusRow">
+      <div class="rank"><strong id="p1score">0</strong><span>得分</span></div>
+      <div>僅可用下方虛擬鍵盤輸入與送出</div>
+    </div>
+  </section>
+
+  <!-- 中央拔河動畫區 -->
+  <section class="panel arena" style="grid-column:auto">
+    <div class="ropeWrap">
+      <svg class="svgStage" viewBox="0 0 980 260" aria-label="拔河動畫" id="stage">
+        <line x1="0" y1="210" x2="980" y2="210" class="ground"/>
+        <g id="ropeGroup">
+          <path id="rope" class="ropeLine" d="M140,160 C320,160 660,160 840,160" fill="none" stroke-dasharray="8 10"/>
+          <polygon id="ropeFlag" points="490,140 520,160 490,180" fill="#f59e0b"/>
+          <circle cx="492" cy="160" r="3" fill="#fff" opacity="0.9"/>
+        </g>
+        
+        <!-- 藍隊（左） -->
+        <g class="team blue idle" id="teamBlue" transform="translate(170,170)">
+          <g class="bodyWrap" transform="rotate(-15)">
+            <!-- 後臂 -->
+            <path class="arm upperarmR" d="M-6,-42 L18,-24"/><path class="arm forearmR" d="M18,-24 L48,-2"/>
+            <!-- 後腿 -->
+            <path class="leg" d="M-4,-8 L18,14"/><rect class="shoe" x="12" y="14" width="22" height="8" rx="3"/>
+            
+            <!-- 軀幹 -->
+            <rect class="shirt blue" x="-36" y="-54" width="36" height="36" rx="8"/>
+            <path d="M-26,-54 L-18,-42 L-10,-54" fill="#fff" opacity="0.3"/> 
+            <rect class="shorts blue" x="-32" y="-20" width="30" height="18" rx="5"/>
+            <path d="M-32,-12 L-2,-12" stroke="#fff" stroke-width="2" opacity="0.5"/>
+            
+            <!-- 頭部組 -->
+            <g class="head-group" transform="translate(-16, -62)">
+              <circle class="head" cx="0" cy="0" r="16"/>
+              <path class="hair" d="M-15,-5 C-18,-22 0,-24 15,-5 C10,-12 0,-14 -15,-5 Z"/>
+              <rect class="headband" x="-15" y="-12" width="30" height="6" fill="#fff" opacity="0.9"/>
+              <path d="M2,-3 L6,-1 L2,1" stroke="#111827" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+              <path d="M10,-3 L14,-1 L10,1" stroke="#111827" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+              <rect x="5" y="4" width="8" height="5" fill="#fff" stroke="#111827" stroke-width="1" rx="1"/>
+              <path class="sweat" d="M-10,-5 C-10,-5 -14,-1 -14,2 C-14,4 -12,6 -10,6 C-8,6 -6,4 -6,2 C-6,-1 -10,-5 -10,-5 Z" fill="#60a5fa" opacity="0"/>
+            </g>
+            
+            <!-- 前腿 -->
+            <path class="leg" d="M-24,-8 L-46,14"/><rect class="shoe" x="-54" y="14" width="22" height="8" rx="3"/>
+            <!-- 前臂 -->
+            <path class="arm upperarmL" d="M-28,-42 L-48,-16"/><path class="arm forearmL" d="M-48,-16 L-8,-2"/>
+          </g>
+        </g>
+        
+        <!-- 紅隊（右） -->
+        <g class="team red idle" id="teamRed" transform="translate(810,170) scale(-1,1)">
+          <g class="bodyWrap" transform="rotate(-15)">
+            <path class="arm upperarmR" d="M-6,-42 L18,-24"/><path class="arm forearmR" d="M18,-24 L48,-2"/>
+            <path class="leg" d="M-4,-8 L18,14"/><rect class="shoe" x="12" y="14" width="22" height="8" rx="3"/>
+            
+            <rect class="shirt red" x="-36" y="-54" width="36" height="36" rx="8"/>
+            <path d="M-26,-54 L-18,-42 L-10,-54" fill="#fff" opacity="0.3"/>
+            <rect class="shorts red" x="-32" y="-20" width="30" height="18" rx="5"/>
+            <path d="M-32,-12 L-2,-12" stroke="#fff" stroke-width="2" opacity="0.5"/>
+            
+            <g class="head-group" transform="translate(-16, -62)">
+              <circle class="head" cx="0" cy="0" r="16"/>
+              <path class="hair" d="M-15,-5 C-18,-22 0,-24 15,-5 C10,-12 0,-14 -15,-5 Z"/>
+              <rect class="headband" x="-15" y="-12" width="30" height="6" fill="#fff" opacity="0.9"/>
+              <path d="M2,-3 L6,-1 L2,1" stroke="#111827" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+              <path d="M10,-3 L14,-1 L10,1" stroke="#111827" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+              <rect x="5" y="4" width="8" height="5" fill="#fff" stroke="#111827" stroke-width="1" rx="1"/>
+              <path class="sweat" d="M-10,-5 C-10,-5 -14,-1 -14,2 C-14,4 -12,6 -10,6 C-8,6 -6,4 -6,2 C-6,-1 -10,-5 -10,-5 Z" fill="#60a5fa" opacity="0"/>
+            </g>
+            
+            <path class="leg" d="M-24,-8 L-46,14"/><rect class="shoe" x="-54" y="14" width="22" height="8" rx="3"/>
+            <path class="arm upperarmL" d="M-28,-42 L-48,-16"/><path class="arm forearmL" d="M-48,-16 L-8,-2"/>
+          </g>
+        </g>
+      </svg>
+
+      <div class="track" id="track" aria-label="拔河軌道">
+        <div class="bar"></div>
+        <div class="victory" title="黃色勝利線"></div>
+        <div id="ticks"></div>
+        <div class="flag" id="flag">⛳</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 玩家 2 -->
+  <section class="panel p2" aria-labelledby="p2title">
+    <div class="title"><span id="p2title">玩家 2</span><span>紅隊</span></div>
+    <div class="question" id="q2">按「開始」產生題目</div>
+    <div class="inputRow">
+      <div id="d2" class="display" aria-live="polite"><span class="placeholder">點擊下方鍵盤輸入</span></div>
+    </div>
+    <div class="pad" id="pad2" aria-label="玩家2數位鍵盤"></div>
+    <div class="statusRow">
+      <div class="rank"><strong id="p2score">0</strong><span>得分</span></div>
+      <div>僅可用下方虛擬鍵盤輸入與送出</div>
+    </div>
+  </section>
+</main>
+
+<div id="victoryOverlay">
+  <div class="banner" id="victoryBanner" role="dialog" aria-live="polite">
+    <h2 id="victoryText">勝利！</h2>
+    <div class="who" id="victoryWho">藍隊</div>
+    <button class="again" id="playAgainBtn">再玩一次</button>
+    <canvas id="confettiCanvas" width="1" height="1" aria-hidden="true"></canvas>
+  </div>
+</div>
+
+<dialog id="dlg">
+  <div class="modalHead">教師設定</div>
+  <div class="modalBody">
+    <div class="row">
+      <div>
+        <label for="timeSel">倒數時間（秒）</label>
+        <input id="timeSel" type="number" min="30" max="600" step="10" value="90" />
+      </div>
+      <div>
+        <label for="stepsSel">軌道格數（奇數）</label>
+        <input id="stepsSel" type="number" min="7" max="21" step="2" value="11" />
+      </div>
+      <div>
+        <label for="modeSel">玩法模式</label>
+        <select id="modeSel">
+          <option value="continuous">連續制（答對即換新題）</option>
+          <option value="turn">回合制（同步判分後換題）</option>
+        </select>
+      </div>
+      <div>
+        <label for="rangeSel">出題範圍（數字 0–N）</label>
+        <select id="rangeSel">
+          <option value="10" selected>0–10（建議）</option>
+          <option value="20">0–20</option>
+        </select>
+      </div>
+      <div>
+        <label for="opsSel">運算</label>
+        <select id="opsSel">
+          <option value="+-">加與減（隨機）</option>
+          <option value="+">只出加法（含負數）</option>
+          <option value="-">只出減法（不出正−正）</option>
+        </select>
+      </div>
+      <div style="grid-column:1 / -1;display:flex;gap:12px;align-items:center">
+        <label><input id="banPP" type="checkbox" checked /> 禁止「正數 + 正數」</label>
+        <label><input id="banPmP" type="checkbox" checked /> 禁止「正數 − 正數」</label>
+      </div>
+      <div style="grid-column:1 / -1;display:grid;grid-template-columns:1fr 2fr;gap:10px;align-items:center">
+        <label for="soundEnable" style="display:flex;align-items:center;gap:8px">
+          <input id="soundEnable" type="checkbox" checked />
+          啟用音效
+        </label>
+        <div>
+          <label for="soundVol">音量：<span id="volLabel">70%</span></label>
+          <input id="soundVol" type="range" min="0" max="100" value="70" />
+        </div>
+      </div>
+    </div>
+    <p style="color:#6b7280;font-size:12px;margin:6px 0 0">
+      備註：瀏覽器需先有互動（按「開始」或按鍵）後音效才會出聲。
+    </p>
+  </div>
+  <div class="footer">
+    <button id="closeDlg">關閉</button>
+    <button class="primary" id="saveDlg">儲存</button>
+  </div>
+</dialog>
+
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+<script>
+(function(){
+  const $=s=>document.querySelector(s);
+  const els={
+    q1:$('#q1'), q2:$('#q2'),
+    d1:$('#d1'), d2:$('#d2'),
+    pad1:$('#pad1'), pad2:$('#pad2'),
+    p1score:$('#p1score'), p2score:$('#p2score'),
+    timer:$('#timer'), flag:$('#flag'), ticks:$('#ticks'), track:$('#track'),
+    stage:$('#stage'), rope:$('#rope'), ropeFlag:$('#ropeFlag'),
+    btnStart:$('#btnStart'), btnReset:$('#btnReset'), btnSettings:$('#btnSettings'),
+    dlg:$('#dlg'),
+    timeSel:$('#timeSel'), stepsSel:$('#stepsSel'), modeSel:$('#modeSel'),
+    rangeSel:$('#rangeSel'), opsSel:$('#opsSel'),
+    banPP:$('#banPP'), banPmP:$('#banPmP'),
+    toast:$('#toast'),
+    victoryOverlay:$('#victoryOverlay'), victoryWho:$('#victoryWho'), victoryText:$('#victoryText'),
+    playAgainBtn:$('#playAgainBtn'), confettiCanvas:$('#confettiCanvas'),
+    teamBlue:$('#teamBlue'), teamRed:$('#teamRed'),
+    soundEnable:$('#soundEnable'), soundVol:$('#soundVol'), volLabel:$('#volLabel'),
+    victoryBanner:$('#victoryBanner')
+  };
+
+  const game={
+    running:false, mode:'continuous', steps:11, pos:0,
+    timerSec:90, range:10, ops:'+-',
+    banPosPos:true, banPosMinusPos:true,
+    p1:{score:0, pending:false, buf:''},
+    p2:{score:0, pending:false, buf:''},
+    e1:null, e2:null, interval:null
+  };
+
+  // ========= 音效系統 =========
+  const audio={ ctx:null, master:null, enabled:true, volume:0.7, inited:false };
+  function initAudio(){
+    if(audio.inited) return;
+    try{
+      audio.ctx = new (window.AudioContext||window.webkitAudioContext)();
+      audio.master = audio.ctx.createGain();
+      audio.master.gain.value = audio.enabled ? audio.volume : 0;
+      audio.master.connect(audio.ctx.destination);
+      audio.inited = true;
+    }catch(e){ console.warn('Audio init failed', e); }
+  }
+  async function resumeAudio(){
+    if(!audio.inited) initAudio();
+    if(audio.ctx && audio.ctx.state==='suspended'){
+      try{ await audio.ctx.resume(); }catch(e){}
+    }
+  }
+  function setAudioEnabled(on){ audio.enabled=on; if(!audio.inited) return; audio.master.gain.value = on ? audio.volume : 0; }
+  function setVolume(v){ audio.volume=v; if(audio.inited && audio.enabled) audio.master.gain.value=v; }
+
+  function createNoiseBuffer(ctx,len=0.5){
+    const buffer=ctx.createBuffer(1, ctx.sampleRate*len, ctx.sampleRate);
+    const data=buffer.getChannelData(0);
+    for(let i=0;i<data.length;i++) data[i]=Math.random()*2-1;
+    return buffer;
+  }
+  let cachedNoise=null;
+
+  function playTug({success=true}={}){
+    if(!audio.enabled || !audio.inited) return;
+    const ctx=audio.ctx;
+    if(!cachedNoise) cachedNoise=createNoiseBuffer(ctx,0.25);
+
+    const nsrc=ctx.createBufferSource(); nsrc.buffer=cachedNoise;
+    const bpf=ctx.createBiquadFilter(); bpf.type='bandpass';
+    bpf.frequency.value = success? 1800:850; bpf.Q.value= success? 4:2.2;
+    const nGain=ctx.createGain();
+    const nStart=ctx.currentTime;
+    nGain.gain.setValueAtTime(0.0001, nStart);
+    nGain.gain.linearRampToValueAtTime(success?0.5:0.25, nStart+0.02);
+    nGain.gain.exponentialRampToValueAtTime(0.0001, nStart+0.16);
+    nsrc.connect(bpf).connect(nGain).connect(audio.master);
+    nsrc.start(nStart); nsrc.stop(nStart+0.18);
+
+    const osc=ctx.createOscillator(); osc.type= success?'triangle':'sine';
+    const oGain=ctx.createGain();
+    const startF = success? 220:140, endF= success? 140:80;
+    osc.frequency.setValueAtTime(startF, nStart);
+    osc.frequency.exponentialRampToValueAtTime(endF, nStart+0.18);
+    oGain.gain.setValueAtTime(0.0001, nStart);
+    oGain.gain.linearRampToValueAtTime(success?0.35:0.18, nStart+0.02);
+    oGain.gain.exponentialRampToValueAtTime(0.0001, nStart+0.22);
+    osc.connect(oGain).connect(audio.master);
+    osc.start(nStart); osc.stop(nStart+0.24);
+
+    if(success){
+      const blip=ctx.createOscillator(); blip.type='square';
+      const g=ctx.createGain(); const t=nStart+0.03;
+      blip.frequency.value=1200;
+      g.gain.setValueAtTime(0.0001,t); g.gain.linearRampToValueAtTime(0.15,t+0.01);
+      g.gain.exponentialRampToValueAtTime(0.0001,t+0.08);
+      blip.connect(g).connect(audio.master); blip.start(t); blip.stop(t+0.1);
+    }
+  }
+  function playVictory(who){
+    if(!audio.enabled || !audio.inited) return;
+    const ctx=audio.ctx;
+    const seq = who==='p1' ? [523.25,659.25,783.99,1046.5] : [587.33,739.99,880.00,1174.7];
+    const now=ctx.currentTime;
+    seq.forEach((f,i)=>{
+      const t=now + i*0.18;
+      const o=ctx.createOscillator(); o.type='triangle'; o.frequency.value=f;
+      const g=ctx.createGain(); g.gain.setValueAtTime(0.0001,t);
+      g.gain.linearRampToValueAtTime(0.45, t+0.03);
+      g.gain.exponentialRampToValueAtTime(0.0001, t+0.24);
+      o.connect(g).connect(audio.master); o.start(t); o.stop(t+0.27);
+    });
+    const tEnd=now+seq.length*0.18+0.05;
+    [seq[0], seq[2]].forEach((f,idx)=>{
+      const o=ctx.createOscillator(); o.type='sawtooth'; o.frequency.value=f*(idx?1:0.5);
+      const g=ctx.createGain(); g.gain.setValueAtTime(0.0001,tEnd);
+      g.gain.linearRampToValueAtTime(0.35, tEnd+0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, tEnd+0.4);
+      o.connect(g).connect(audio.master); o.start(tEnd); o.stop(tEnd+0.45);
+    });
+    for(let i=0;i<10;i++){
+      const t=now+0.15+Math.random()*0.5;
+      const src=ctx.createBufferSource(); if(!cachedNoise) cachedNoise=createNoiseBuffer(ctx,0.3);
+      src.buffer=cachedNoise;
+      const bp=ctx.createBiquadFilter(); bp.type='bandpass'; bp.frequency.value=1500+Math.random()*1200; bp.Q.value=4;
+      const g=ctx.createGain(); g.gain.setValueAtTime(0.0001,t);
+      g.gain.linearRampToValueAtTime(0.25, t+0.01);
+      g.gain.exponentialRampToValueAtTime(0.0001, t+0.12);
+      src.connect(bp).connect(g).connect(audio.master);
+      src.start(t); src.stop(t+0.14);
+    }
+  }
+  function playStart(){
+    if(!audio.enabled || !audio.inited) return;
+    const ctx=audio.ctx, now=ctx.currentTime;
+    [523.25,659.25,783.99].forEach((f,i)=>{
+      const t=now+i*0.12;
+      const o=ctx.createOscillator(); o.type='square'; o.frequency.value=f;
+      const g=ctx.createGain(); g.gain.setValueAtTime(0.0001,t);
+      g.gain.linearRampToValueAtTime(0.25, t+0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, t+0.15);
+      o.connect(g).connect(audio.master); o.start(t); o.stop(t+0.18);
+    });
+  }
+  function playTimeup(){
+    if(!audio.enabled || !audio.inited) return;
+    const ctx=audio.ctx, now=ctx.currentTime;
+    [659.25,523.25,392.00].forEach((f,i)=>{
+      const t=now+i*0.14;
+      const o=ctx.createOscillator(); o.type='sawtooth'; o.frequency.value=f;
+      const g=ctx.createGain(); g.gain.setValueAtTime(0.0001,t);
+      g.gain.linearRampToValueAtTime(0.3, t+0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, t+0.2);
+      o.connect(g).connect(audio.master); o.start(t); o.stop(t+0.24);
+    });
+  }
+  // ========= 音效系統結束 =========
+
+  function showToast(m){ els.toast.textContent=m; els.toast.classList.add('show'); setTimeout(()=>els.toast.classList.remove('show'),1200); }
+  function clamp(n,min,max){ return Math.max(min, Math.min(max, n)); }
+  function choice(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
+  function randInt(a,b){ return Math.floor(Math.random()*(b-a+1))+a; }
+  const fmt = n => n<0?`(${n})`:`${n}`;
+
+  const BANK_TEXTS = [
+    "-2 + 7","6 - 9","-4 + 3",
+    "-6 + 1","-3 - 2",
+    "4 - 8","-1 + 5","7 - 10",
+    "-6 + 9","2 - 4","0 - 3",
+    "-5 + 6","5 - 7","-2 - 3",
+    "3 - 8","1 - 4","-3 - 1",
+    "-5 + 4"
+  ];
+  function evalAddSub(expr){
+    const s = String(expr).replace(/\s+/g,"");
+    if(!/^[+\-]?\d+(?:[+\-]\d+)*$/.test(s)) return NaN;
+    let tot = 0, num = "", sign = 1;
+    for(let i=0;i<s.length;i++){
+      const ch = s[i];
+      if(ch === "+" || ch === "-"){
+        if(num !== ""){ tot += sign * Number(num); num = ""; }
+        sign = ch === "+" ? 1 : -1;
+      }else{
+        num += ch;
+      }
+    }
+    if(num !== "") tot += sign * Number(num);
+    return tot;
+  }
+  const BANK = BANK_TEXTS.map(t => ({ text: t, ans: evalAddSub(t) }));
+  let __idx1 = 0, __idx2 = Math.ceil(BANK.length/2);
+
+  function buildTrack(){
+    els.ticks.innerHTML='';
+    const n=game.steps;
+    for(let i=0;i<n;i++){
+      const t=document.createElement('div'); t.className='tick';
+      t.style.left = (i/(n-1))*100 + '%'; els.ticks.appendChild(t);
+    }
+    game.pos=Math.floor(n/2);
+    renderFlag();
+  }
+  function renderFlag(){
+    const n=game.steps, max=n-1;
+    const x=(game.pos/max)*100;
+    els.flag.style.transform=`translate(-50%,-50%) translateX(${x}%)`;
+    const svgX = 140 + (700)*(game.pos/(n-1));
+    const base = 22;
+    els.ropeFlag.setAttribute('points',`${svgX},${160-base} ${svgX+30},160 ${svgX},${160+base}`);
+  }
+  function ropeWave(){ els.rope.classList.remove('ropeWave'); void els.rope.offsetWidth; els.rope.classList.add('ropeWave'); }
+
+  function move(by){
+    const n=game.steps;
+    game.pos = Math.max(0, Math.min(n-1, game.pos + by));
+    renderFlag();
+    ropeWave();
+    checkWin();
+  }
+
+  function checkWin(){
+    const n=game.steps;
+    if(!game.running) return;
+    if(game.pos===0){ endGameWithWinner('p1'); }
+    else if(game.pos===n-1){ endGameWithWinner('p2'); }
+  }
+
+  function endGameWithWinner(who){
+    game.running=false; clearInterval(game.interval);
+    const winnerText = who==='p1'?'藍隊（玩家 1）勝！':'紅隊（玩家 2）勝！';
+    showVictory(who, winnerText);
+    els.btnStart.textContent='再玩一次';
+    resumeAudio().then(()=>playVictory(who));
+  }
+
+  let confettiTimer=null;
+  function showVictory(who, text){
+    els.victoryWho.textContent = who==='p1' ? '藍隊勝利！' : '紅隊勝利！';
+    els.victoryText.textContent = text;
+    els.victoryOverlay.style.display='grid';
+    els.victoryBanner.classList.toggle('blue', who==='p1');
+    els.victoryBanner.classList.toggle('red',  who!=='p1');
+
+    els.teamBlue.classList.remove('celebrate','defeat');
+    els.teamRed.classList.remove('celebrate','defeat');
+    if(who==='p1'){ els.teamBlue.classList.add('celebrate'); els.teamRed.classList.add('defeat'); }
+    else { els.teamRed.classList.add('celebrate'); els.teamBlue.classList.add('defeat'); }
+
+    startConfetti();
+  }
+
+  function hideVictory(){
+    els.victoryOverlay.style.display='none';
+    stopConfetti();
+    els.teamBlue.classList.remove('celebrate','defeat');
+    els.teamRed.classList.remove('celebrate','defeat');
+  }
+
+  function startConfetti(){
+    const c=els.confettiCanvas, ctx=c.getContext('2d');
+    function resize(){ c.width=window.innerWidth; c.height=window.innerHeight; }
+    resize(); window.addEventListener('resize',resize);
+    const colors=['#f59e0b','#34d399','#60a5fa','#f43f5e','#a78bfa','#fcd34d'];
+    const N=140;
+    const P=[...Array(N)].map(()=>({
+      x:Math.random()*c.width, y:-20 - Math.random()*c.height*0.6, r:4+Math.random()*6,
+      vy:1.5+Math.random()*2.5, vx:-1+Math.random()*2, rot:Math.random()*Math.PI*2,
+      vr:-0.1+Math.random()*0.2, col:colors[(Math.random()*colors.length)|0]
+    }));
+    function step(){
+      ctx.clearRect(0,0,c.width,c.height);
+      P.forEach(p=>{
+        p.x+=p.vx; p.y+=p.vy; p.rot+=p.vr;
+        if(p.y>c.height+20){ p.y=-20; p.x=Math.random()*c.width; }
+        ctx.save(); ctx.translate(p.x,p.y); ctx.rotate(p.rot);
+        ctx.fillStyle=p.col; ctx.fillRect(-p.r/2,-p.r/2,p.r,p.r*0.6);
+        ctx.restore();
+      });
+      confettiTimer=requestAnimationFrame(step);
+    }
+    step();
+    els.playAgainBtn.onclick=()=>{ hideVictory(); resetGame(); };
+    els.victoryOverlay.onclick=(e)=>{ if(e.target===els.victoryOverlay){ hideVictory(); } };
+  }
+  function stopConfetti(){ if(confettiTimer){ cancelAnimationFrame(confettiTimer); confettiTimer=null; } }
+
+  function genOne(){
+    const ops = game.ops==='+-' ? ['+','-'] : [game.ops];
+    const op = choice(ops);
+    let a, b;
+    do {
+      const aMag = randInt(0,game.range), bMag = randInt(0,game.range);
+      const sa = choice(['+','-']), sb = choice(['+','-']);
+      a = (sa==='-'?-aMag:aMag);
+      b = (sb==='-'?-bMag:bMag);
+      if(op==='+' && game.banPosPos && a>0 && b>0){ if(Math.random()<0.5) a=-aMag; else b=-bMag; }
+      if(op==='-' && game.banPosMinusPos && a>0 && b>0){ b=-bMag; }
+    } while ((op==='+' && game.banPosPos && a>0 && b>0) || (op==='-' && game.banPosMinusPos && a>0 && b>0));
+    const text = `${fmt(a)} ${op} ${fmt(b)}`;
+    const ans = op==='+' ? (a+b) : (a-b);
+    return {text, ans};
+  }
+
+  function updateDisplay(who){
+    const el = who==='p1'? els.d1 : els.d2;
+    const buf = who==='p1'? game.p1.buf : game.p2.buf;
+    if(!buf || buf==='-' ){
+      el.innerHTML = '<span class="placeholder">點擊下方鍵盤輸入</span>';
+    }else{
+      el.textContent = buf;
+    }
+  }
+
+  function nextProblems(target='both'){
+    const pick = (startIdx, otherText) => {
+      let idx = startIdx, q, tries = 0;
+      do {
+        q = BANK[idx % BANK.length];
+        idx++;
+        tries++;
+      } while (q && q.text === otherText && tries <= BANK.length);
+      return { q, idx };
+    };
+
+    if(target==='both' || target==='p1'){
+      const other = game.e2 ? game.e2.text : null;
+      const { q, idx } = pick(__idx1, other);
+      __idx1 = idx;
+      game.e1 = q;
+      game.p1.buf=''; updateDisplay('p1');
+      els.q1.textContent = `${q.text} = ?`;
+    }
+    if(target==='both' || target==='p2'){
+      const other = game.e1 ? game.e1.text : null;
+      const { q, idx } = pick(__idx2, other);
+      __idx2 = idx;
+      game.e2 = q;
+      game.p2.buf=''; updateDisplay('p2');
+      els.q2.textContent = `${q.text} = ?`;
+    }
+  }
+
+  function trySubmit(who){
+    const player = who==='p1'? game.p1 : game.p2;
+    const q      = who==='p1'? game.e1 : game.e2;
+    const raw = (player.buf||'').trim();
+    if(raw==='' || raw==='-' ){ showToast('請先輸入數字'); return; }
+    const val = parseInt(raw,10);
+    if(Number.isNaN(val)){ showToast('請輸入整數'); return; }
+    submit(who, val);
+  }
+
+  function submit(who, val){
+    if(!game.running) return;
+    const q   = who==='p1'?game.e1:game.e2;
+    const scoreEl = who==='p1'?els.p1score:els.p2score;
+    const player  = who==='p1'?game.p1:game.p2;
+
+    resumeAudio();
+
+    if(val===q.ans){
+      pulseTug(who);
+      move(who==='p1'?-1:+1);
+      player.score++; scoreEl.textContent=player.score;
+      playTug({success:true});
+      showToast(`${who==='p1'?'玩家1':'玩家2'} ✅ +1 分`);
+    }else{
+      // 加上這行：如果一方答錯，對手就展現勝利方「後拉」爆發動作，答錯方自然會踉蹌
+      pulseTug(who==='p1'?'p2':'p1');
+      move(who==='p1'?+1:-1);
+      player.score = Math.max(0, player.score - 1);
+      scoreEl.textContent = player.score;
+      playTug({success:false});
+      showToast(`${who==='p1'?'玩家1':'玩家2'} ❌ −1 分`);
+    }
+
+    if(game.mode==='continuous'){
+      nextProblems(who);
+    }else{
+      if(who==='p1') game.p1.pending=true; else game.p2.pending=true;
+      if(game.p1.pending && game.p2.pending){
+        game.p1.pending=false; game.p2.pending=false; nextProblems('both');
+      }
+    }
+    player.buf=''; updateDisplay(who);
+  }
+
+  function pulseTug(who){
+    const stage = document.getElementById('stage');
+    stage.classList.remove('tugLeft','tugRight'); void stage.offsetWidth;
+    stage.classList.add(who==='p1'?'tugLeft':'tugRight');
+  }
+
+  function startTimer(){
+    clearInterval(game.interval);
+    let t=game.timerSec; els.timer.textContent=t;
+    game.interval=setInterval(()=>{
+      if(!game.running){clearInterval(game.interval);return;}
+      t--; els.timer.textContent=t;
+      if(t<=0){
+        clearInterval(game.interval);
+        const mid=Math.floor(game.steps/2);
+        resumeAudio().then(()=>playTimeup());
+        if(game.pos<mid) endGameWithWinner('p1');
+        else if(game.pos>mid) endGameWithWinner('p2');
+        else { endGameWithWinner(Math.random()<0.5?'p1':'p2'); }
+      }
+    },1000);
+  }
+
+  function startGame(){
+    hideVictory();
+    game.p1={score:0,pending:false,buf:''};
+    game.p2={score:0,pending:false,buf:''};
+    els.p1score.textContent='0'; els.p2score.textContent='0';
+    buildTrack(); nextProblems('both'); startTimer();
+    game.running=true; els.btnStart.textContent='暫停';
+    resumeAudio().then(()=>playStart());
+  }
+  function pauseResume(){
+    if(!game.running){
+      game.running=true; startTimer(); els.btnStart.textContent='暫停'; showToast('繼續');
+    }else{
+      game.running=false; clearInterval(game.interval); els.btnStart.textContent='繼續'; showToast('已暫停');
+    }
+  }
+  function resetGame(){
+    game.running=false; clearInterval(game.interval);
+    hideVictory();
+    els.timer.textContent=game.timerSec; buildTrack();
+    els.q1.textContent='按「開始」產生題目'; els.q2.textContent='按「開始」產生題目';
+    game.p1.buf=''; game.p2.buf=''; updateDisplay('p1'); updateDisplay('p2');
+    els.p1score.textContent='0'; els.p2score.textContent='0';
+    els.btnStart.textContent='開始';
+  }
+
+  function applySettings(){
+    game.timerSec = Math.max(30, Math.min(600, parseInt(els.timeSel.value,10)||90));
+    game.steps    = Math.max(7, Math.min(21, parseInt(els.stepsSel.value,10)||11)); if(game.steps%2===0) game.steps+=1;
+    game.mode     = document.querySelector('#modeSel').value;
+    game.range    = parseInt(document.querySelector('#rangeSel').value,10)||10;
+    game.ops      = document.querySelector('#opsSel').value;
+    game.banPosPos= !!els.banPP.checked; game.banPosMinusPos = !!els.banPmP.checked;
+    els.timer.textContent=game.timerSec;
+
+    setAudioEnabled(els.soundEnable.checked);
+    const v = (parseInt(els.soundVol.value,10)||0)/100; setVolume(v);
+    els.volLabel.textContent = Math.round(v*100)+'%';
+
+    buildTrack(); showToast('已更新設定');
+  }
+
+  function buildPad(root, who){
+    root.innerHTML='';
+    const keys=[
+      '7','8','9','←',
+      '4','5','6','-',
+      '1','2','3','C',
+      '0','OK'
+    ];
+    keys.forEach(k=>{
+      const b=document.createElement('button');
+      b.type='button';
+      b.className='key'+(k==='C'?' c':'')+(k==='OK'?' ok':'');
+      b.textContent=k;
+      b.addEventListener('click',()=>{
+        resumeAudio();
+        handleKey(who, k);
+      });
+      root.appendChild(b);
+    });
+  }
+
+  function handleKey(who, k){
+    const player = who==='p1'? game.p1 : game.p2;
+    let s = player.buf || '';
+    if(k>='0' && k<='9'){
+      if(s==='0') s=''; 
+      if(s==='-0') s='-';
+      if(s.length<6) s += k;
+    }else if(k==='-'){
+      if(s.startsWith('-')) s = s.slice(1);
+      else s = s ? ('-'+s) : '-';
+    }else if(k==='←'){
+      s = s.slice(0,-1);
+    }else if(k==='C'){
+      s = '';
+    }else if(k==='OK'){
+      player.buf = s; updateDisplay(who);
+      trySubmit(who);
+      return;
+    }
+    player.buf = s;
+    updateDisplay(who);
+  }
+
+  buildTrack();
+  buildPad(els.pad1,'p1'); buildPad(els.pad2,'p2');
+
+  els.btnStart.addEventListener('click',()=>{ resumeAudio(); if(els.btnStart.textContent==='開始'||els.btnStart.textContent==='再玩一次') startGame(); else pauseResume(); });
+  els.btnReset.addEventListener('click',resetGame);
+  document.querySelector('#btnSettings').addEventListener('click',()=>els.dlg.showModal());
+  document.querySelector('#saveDlg').addEventListener('click',()=>{ applySettings(); els.dlg.close(); });
+  document.querySelector('#closeDlg').addEventListener('click',()=>els.dlg.close());
+  els.soundVol.addEventListener('input',e=>{ els.volLabel.textContent=e.target.value+'%'; });
+
+  setAudioEnabled(true); setVolume(0.7);
+})();
+</script>
+</body>
+</html>
